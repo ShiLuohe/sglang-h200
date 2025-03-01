@@ -128,6 +128,7 @@ class DeepseekV2MoE(nn.Module):
     def __init__(
         self,
         config: PretrainedConfig,
+        layer_id: int, 
         quant_config: Optional[QuantizationConfig] = None,
     ):
         super().__init__()
@@ -149,10 +150,13 @@ class DeepseekV2MoE(nn.Module):
 
         self.gate = MoEGate(config=config)
 
+        top_k_list = [6] * 27
+        cur_top_k = top_k_list[layer_id]
+
         MoEImpl = EPMoE if global_server_args_dict["enable_ep_moe"] else FusedMoE
         self.experts = MoEImpl(
             num_experts=config.n_routed_experts,
-            top_k=config.num_experts_per_tok,
+            top_k=cur_top_k,
             hidden_size=config.hidden_size,
             intermediate_size=config.moe_intermediate_size,
             renormalize=config.norm_topk_prob,
@@ -904,7 +908,7 @@ class DeepseekV2DecoderLayer(nn.Module):
             and layer_id >= config.first_k_dense_replace
             and layer_id % config.moe_layer_freq == 0
         ):
-            self.mlp = DeepseekV2MoE(config=config, quant_config=quant_config)
+            self.mlp = DeepseekV2MoE(config=config, quant_config=quant_config, layer_id=layer_id)
         else:
             self.mlp = DeepseekV2MLP(
                 hidden_size=config.hidden_size,
